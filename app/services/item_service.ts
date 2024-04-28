@@ -3,6 +3,8 @@ import User from '#models/user'
 import { itemCreationValidator } from '#validators/item'
 import { HttpContext } from '@adonisjs/core/http'
 
+type ItemWithCount = Item & { count: number }
+
 export default class ItemService {
   getFormattedDate(): string {
     const currentDate = new Date()
@@ -14,6 +16,25 @@ export default class ItemService {
 
     // Formater la date
     return dateFormatter.format(currentDate)
+  }
+
+  async itemsWithCount(user: User): Promise<ItemWithCount[]> {
+    // Récupérer les items distincts de l'utilisateur avec leur compteur
+    const distinctItemsWithCount = await user
+      .related('items')
+      .query()
+      .select('items.*')
+      .count('items.id as count')
+      .groupBy('items.id')
+
+    const itemsWithCount = distinctItemsWithCount.map((item: Item): ItemWithCount => {
+      return {
+        ...item.serialize(),
+        count: item.$extras.count,
+      } as ItemWithCount
+    })
+
+    return itemsWithCount
   }
 
   computeTotalValueOfItems(user: User): number {
@@ -35,11 +56,7 @@ export default class ItemService {
       throw new Error('User not found')
     }
 
-    await user.preload('items')
-
-    console.log('ok user => ', user.items)
-
-    return user.items || []
+    return this.itemsWithCount(user)
   }
 
   // This function will create a new item and attach it to current user
@@ -69,6 +86,8 @@ export default class ItemService {
       last_price: payload.price,
       url: payload.url,
     })
+
+    // Be careful here of how much we have !
 
     if (user.total_value[formattedDate]) {
       user.total_value[formattedDate] += payload.price

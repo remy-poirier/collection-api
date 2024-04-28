@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon'
 import hash from '@adonisjs/core/services/hash'
 import { compose } from '@adonisjs/core/helpers'
-import { BaseModel, column, manyToMany } from '@adonisjs/lucid/orm'
+import { BaseModel, column, computed, manyToMany } from '@adonisjs/lucid/orm'
 import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
 import Item from './item.js'
 import type { ManyToMany } from '@adonisjs/lucid/types/relations'

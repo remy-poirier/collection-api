@@ -36,7 +36,11 @@ export default class StatisticsService {
 
     await user.preload('items')
     const sortedByHighestPrice = user.items.sort((a, b) => b.highest_price - a.highest_price)
-    const mostValuableItems = sortedByHighestPrice.slice(0, 3)
+    const onlyUniqueItems = [...new Set(sortedByHighestPrice.map((item) => item.id))].map(
+      (itemId) => sortedByHighestPrice.find((item) => item.id === itemId)
+    )
+
+    const mostValuableItems = onlyUniqueItems.slice(0, 3)
 
     return {
       nbItems: user.items.length,
