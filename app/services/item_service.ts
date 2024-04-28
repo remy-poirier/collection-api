@@ -1,6 +1,6 @@
 import Item from '#models/item'
 import User from '#models/user'
-import { itemCreationValidator } from '#validators/item'
+import { itemCreationValidator, itemUpdateCountValidator } from '#validators/item'
 import { HttpContext } from '@adonisjs/core/http'
 
 type ItemWithCount = Item & { count: number }
@@ -90,12 +90,12 @@ export default class ItemService {
     // Be careful here of how much we have !
 
     if (user.total_value[formattedDate]) {
-      user.total_value[formattedDate] += payload.price
+      user.total_value[formattedDate] += payload.price * payload.count
     } else {
-      user.total_value[formattedDate] = payload.price
+      user.total_value[formattedDate] = payload.price * payload.count
     }
 
-    await user.related('items').attach([newItem.id])
+    await user.related('items').attach(Array(payload.count).fill(newItem.id))
     await user.save()
 
     return newItem
@@ -170,5 +170,46 @@ export default class ItemService {
         },
       },
     })
+  }
+
+  async updateCount({ request, auth }: HttpContext) {
+    const userId = auth.user?.id
+    if (!userId) {
+      throw new Error(`No userId found`)
+    }
+
+    const user = await User.find(userId)
+    if (!user) {
+      throw new Error('User not found')
+    }
+    const data = request.all()
+    const payload = await itemUpdateCountValidator.validate(data)
+
+    const item = await Item.findOrFail(payload.item_id)
+
+    const currentCountItem = await user
+      .related('items')
+      .query()
+      .where('item_id', item.id)
+      .count('* as total')
+      .first()
+
+    if (currentCountItem) {
+      let totalValue = user.total_value[this.getFormattedDate()] || 0
+      const currentCount = currentCountItem.$extras.total
+
+      // Detach all items and subtracting their amount
+      await user.related('items').detach([item.id])
+      totalValue -= item.last_price * currentCount
+
+      // Attaching new count and adding their amount
+      await user.related('items').attach(Array(payload.count).fill(item.id))
+      totalValue += item.last_price * Math.abs(payload.count)
+
+      user.total_value[this.getFormattedDate()] = totalValue
+
+      await user.save()
+      return item
+    }
   }
 }

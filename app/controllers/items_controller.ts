@@ -29,4 +29,8 @@ export default class ItemsController {
     const id = request.request.param('id')
     return this.itemService.byId(id, request)
   }
+
+  async updateCount(request: HttpContext) {
+    return this.itemService.updateCount(request)
+  }
 }

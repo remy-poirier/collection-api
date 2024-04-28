@@ -39,6 +39,7 @@ router
     router.get('', '#controllers/items_controller.all')
     router.put('create', '#controllers/items_controller.create')
     router.get(':id', '#controllers/items_controller.byId')
+    router.post('count', '#controllers/items_controller.updateCount')
   })
   .prefix('collection')
   .use(middleware.auth())
