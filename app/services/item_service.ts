@@ -323,11 +323,9 @@ export default class ItemService {
     const data = request.all()
     const payload = await itemSearchValidator.validate(data)
 
-    let query = Item.query().whereNull('user_id').orWhere('user_id', user.id)
-
-    if (payload.search.length > 0) {
-      query = query.where('name', 'like', `%${payload.search}%`)
-    }
+    // We don't need to also fetch items with current user id as user_id, so we just get items with null user_id
+    // We don't need it because in theory, user cannot have the item he wants to add in DB as he's adding it
+    let query = Item.query().where('name', 'ilike', `%${payload.search}%`).whereNull('user_id')
 
     return query.limit(5)
   }

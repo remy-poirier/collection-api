@@ -1,5 +1,6 @@
 import env from '#start/env'
 import { defineConfig } from '@adonisjs/lucid'
+import app from "@adonisjs/core/services/app";
 
 const dbConfig = defineConfig({
   connection: 'postgres',
@@ -12,7 +13,7 @@ const dbConfig = defineConfig({
         user: env.get('DB_USER'),
         password: env.get('DB_PASSWORD'),
         database: env.get('DB_DATABASE'),
-        ssl: true,
+        ssl: app.inProduction,
       },
       migrations: {
         naturalSort: true,
