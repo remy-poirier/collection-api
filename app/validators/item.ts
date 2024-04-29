@@ -20,3 +20,10 @@ export const itemUpdateCountValidator = vine.compile(
     item_id: vine.string(),
   })
 )
+
+export const itemUpdatePriceValidator = vine.compile(
+  vine.object({
+    price: vine.number().min(1),
+    item_id: vine.string(),
+  })
+)

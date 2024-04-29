@@ -33,4 +33,8 @@ export default class ItemsController {
   async updateCount(request: HttpContext) {
     return this.itemService.updateCount(request)
   }
+
+  async updatePrice(request: HttpContext) {
+    return this.itemService.updatePrice(request)
+  }
 }
