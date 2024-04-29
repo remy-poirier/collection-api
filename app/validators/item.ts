@@ -27,3 +27,9 @@ export const itemUpdatePriceValidator = vine.compile(
     item_id: vine.string(),
   })
 )
+
+export const itemSearchValidator = vine.compile(
+  vine.object({
+    search: vine.string(),
+  })
+)

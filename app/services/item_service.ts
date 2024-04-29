@@ -1,7 +1,7 @@
 import Item from '#models/item'
 import User from '#models/user'
 import {
-  itemCreationValidator,
+  itemCreationValidator, itemSearchValidator,
   itemUpdateCountValidator,
   itemUpdatePriceValidator,
 } from '#validators/item'
@@ -308,5 +308,27 @@ export default class ItemService {
     }
 
     return item
+  }
+
+  async getAutocompleteItems({ request, auth }: HttpContext) {
+    const userId = auth.user?.id
+    if (!userId) {
+      throw new Error(`No userId found`)
+    }
+
+    const user = await User.find(userId)
+    if (!user) {
+      throw new Error('User not found')
+    }
+    const data = request.all()
+    const payload = await itemSearchValidator.validate(data)
+
+    let query = Item.query().whereNull('user_id').orWhere('user_id', user.id)
+
+    if (payload.search.length > 0) {
+      query = query.where('name', 'like', `%${payload.search}%`)
+    }
+
+    return query.limit(5)
   }
 }

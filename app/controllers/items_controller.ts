@@ -37,4 +37,8 @@ export default class ItemsController {
   async updatePrice(request: HttpContext) {
     return this.itemService.updatePrice(request)
   }
+
+  async autocomplete(request: HttpContext) {
+    return this.itemService.getAutocompleteItems(request)
+  }
 }
