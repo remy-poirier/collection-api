@@ -5,7 +5,7 @@ export default class AdminMiddleware {
   async handle(ctx: HttpContext, next: NextFn) {
     const user = await ctx.auth.authenticate()
 
-    if (!user.is_admin) {
+    if (!user.isAdmin) {
       return ctx.response.unauthorized({
         error: 'You must have admin access to access this resource',
       })

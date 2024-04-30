@@ -1,5 +1,7 @@
 import User from '#models/user'
 import { HttpContext } from '@adonisjs/core/http'
+import ItemService from '#services/item_service'
+import { inject } from '@adonisjs/core'
 
 const getLastKnowTotalValue = (
   totalValue: Record<string, number>
@@ -22,7 +24,10 @@ const getLastKnowTotalValue = (
   return { date: sortedDates[0], amount: totalValue[sortedDates[0]] }
 }
 
+@inject()
 export default class StatisticsService {
+  constructor(protected itemService: ItemService) {}
+
   async get({ auth }: HttpContext) {
     const userId = auth.user?.id
     if (!userId) {
@@ -35,7 +40,8 @@ export default class StatisticsService {
     }
 
     await user.preload('items')
-    const sortedByHighestPrice = user.items.sort((a, b) => b.highest_price - a.highest_price)
+    const userItemsWithCount = await this.itemService.itemsWithCount(user)
+    const sortedByHighestPrice = userItemsWithCount.sort((a, b) => b.highestPrice - a.highestPrice)
     const onlyUniqueItems = [...new Set(sortedByHighestPrice.map((item) => item.id))].map(
       (itemId) => sortedByHighestPrice.find((item) => item.id === itemId)
     )
@@ -44,7 +50,7 @@ export default class StatisticsService {
 
     return {
       nbItems: user.items.length,
-      totalValue: getLastKnowTotalValue(user.total_value),
+      totalValue: getLastKnowTotalValue(user.totalValue),
       mostValuableItems,
     }
   }

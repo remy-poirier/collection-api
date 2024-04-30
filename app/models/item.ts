@@ -16,7 +16,7 @@ export default class Item extends BaseModel {
   declare prices: Record<string, number>
 
   @column()
-  declare highest_price: number
+  declare highestPrice: number
 
   @column()
   declare image: string
@@ -34,5 +34,11 @@ export default class Item extends BaseModel {
   declare url: string
 
   @column()
-  declare last_price: number
+  declare lastPrice: number
+
+  @column()
+  declare status: string | null
+
+  @column()
+  declare userId: string | null
 }

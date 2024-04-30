@@ -41,4 +41,12 @@ export default class ItemsController {
   async autocomplete(request: HttpContext) {
     return this.itemService.getAutocompleteItems(request)
   }
+
+  async attach(request: HttpContext) {
+    return this.itemService.attach(request)
+  }
+
+  async detach(request: HttpContext) {
+    return this.itemService.detach(request)
+  }
 }

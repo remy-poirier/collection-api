@@ -1,7 +1,10 @@
 import Item from '#models/item'
 import User from '#models/user'
 import {
-  itemCreationValidator, itemSearchValidator,
+  itemAttachValidator,
+  itemCreationValidator,
+  itemDetachValidator,
+  itemSearchValidator,
   itemUpdateCountValidator,
   itemUpdatePriceValidator,
 } from '#validators/item'
@@ -26,13 +29,14 @@ export default class ItemService {
       .related('items')
       .query()
       .select('items.*')
+      .orderBy('items.created_at', 'desc')
       .count('items.id as count')
       .groupBy('items.id')
 
     return distinctItemsWithCount.map((item: Item): ItemWithCount => {
       return {
         ...item.serialize(),
-        count: item.$extras.count,
+        count: Number.parseInt(item.$extras.count),
       } as ItemWithCount
     })
   }
@@ -72,13 +76,13 @@ export default class ItemService {
     }
 
     const count = item.$extras.count
-    return item.last_price * count
+    return item.lastPrice * count
   }
 
   async computeTotalValueOfItems(user: User): Promise<number> {
     const itemsWithCount = await this.itemsWithCount(user)
     return itemsWithCount.reduce((acc, item) => {
-      return acc + item.last_price * item.count
+      return acc + item.lastPrice * item.count
     }, 0)
   }
 
@@ -117,15 +121,26 @@ export default class ItemService {
       name: payload.name,
       image: payload.image,
       prices: prices,
-      highest_price: payload.price,
-      last_price: payload.price,
+      highestPrice: payload.price,
+      lastPrice: payload.price,
       url: payload.url,
     })
 
-    if (user.total_value[formattedDate]) {
-      user.total_value[formattedDate] += payload.price * payload.count
+    // If user is not admin, attach item to current user, by doing so, other users won't be able to see this item
+    // We do this as a security measure to prevent users from adding dumb items
+    if (!user.isAdmin) {
+      newItem.userId = user.id
+      // By default, set status as PENDING
+      newItem.status = 'PENDING'
+    }
+
+    await newItem.save()
+
+    if (user.totalValue[formattedDate]) {
+      user.totalValue[formattedDate] += payload.price * payload.count
     } else {
-      user.total_value[formattedDate] = payload.price * payload.count
+      const totalValue = await this.computeTotalValueOfItems(user)
+      user.totalValue[formattedDate] = totalValue + payload.price * payload.count
     }
 
     await user.related('items').attach(Array(payload.count).fill(newItem.id))
@@ -135,7 +150,7 @@ export default class ItemService {
   }
 
   async index() {
-    return Item.all()
+    return Item.query().orderBy('created_at', 'desc')
   }
 
   /**
@@ -158,7 +173,7 @@ export default class ItemService {
     }
 
     const item = await Item.findOrFail(id)
-    const lastPrice = item.last_price
+    const lastPrice = item.lastPrice
     const formattedDate = this.getFormattedDate()
     const usersWithItem = await item.related('users').query()
     for (const u of usersWithItem) {
@@ -166,12 +181,12 @@ export default class ItemService {
       const itemTotalValue = itemWithCount.count * lastPrice
       const totalValueOfItemsForUser = await this.computeTotalValueOfItems(u)
 
-      if (!u.total_value[formattedDate]) {
+      if (!u.totalValue[formattedDate]) {
         // If we don't have a total value for this day, then the value will be totalValueOfItems - itemTotalValue
-        u.total_value[formattedDate] = totalValueOfItemsForUser - itemTotalValue
+        u.totalValue[formattedDate] = totalValueOfItemsForUser - itemTotalValue
       } else {
         // If we already have a value for this day, then I subtract the amount of the deleted item
-        u.total_value[formattedDate] -= itemTotalValue
+        u.totalValue[formattedDate] -= itemTotalValue
       }
       await u.save()
     }
@@ -238,18 +253,18 @@ export default class ItemService {
       .first()
 
     if (currentCountItem) {
-      let totalValue = user.total_value[this.getFormattedDate()] || 0
+      let totalValue = user.totalValue[this.getFormattedDate()] || 0
       const currentCount = currentCountItem.$extras.total
 
       // Detach all items and subtracting their amount
       await user.related('items').detach([item.id])
-      totalValue -= item.last_price * currentCount
+      totalValue -= item.lastPrice * currentCount
 
       // Attaching new count and adding their amount
       await user.related('items').attach(Array(payload.count).fill(item.id))
-      totalValue += item.last_price * Math.abs(payload.count)
+      totalValue += item.lastPrice * Math.abs(payload.count)
 
-      user.total_value[this.getFormattedDate()] = totalValue
+      user.totalValue[this.getFormattedDate()] = totalValue
 
       await user.save()
       return item
@@ -279,13 +294,13 @@ export default class ItemService {
     const payload = await itemUpdatePriceValidator.validate(data)
 
     const item = await Item.findOrFail(payload.item_id)
-    const oldItemPrice = item.last_price
+    const oldItemPrice = item.lastPrice
     const formattedDate = this.getFormattedDate()
 
     item.prices[formattedDate] = payload.price
-    item.last_price = payload.price
-    if (item.highest_price < payload.price) {
-      item.highest_price = payload.price
+    item.lastPrice = payload.price
+    if (item.highestPrice < payload.price) {
+      item.highestPrice = payload.price
     }
 
     await item.save()
@@ -299,10 +314,10 @@ export default class ItemService {
       const itemWithCount = await this.itemWithCount(u, item.id)
       const oldItemTotalValue = itemWithCount.count * oldItemPrice
 
-      if (!u.total_value[formattedDate]) {
-        u.total_value[formattedDate] = newItemTotalValue
+      if (!u.totalValue[formattedDate]) {
+        u.totalValue[formattedDate] = newItemTotalValue
       } else {
-        u.total_value[formattedDate] += newItemTotalValue - oldItemTotalValue
+        u.totalValue[formattedDate] += newItemTotalValue - oldItemTotalValue
       }
       await u.save()
     }
@@ -323,10 +338,97 @@ export default class ItemService {
     const data = request.all()
     const payload = await itemSearchValidator.validate(data)
 
+    // We need to exclude items that are already in user's items
+    const userItems = await user.related('items').query().select('id')
+    const userItemsIds = userItems.map((item) => item.id)
+
     // We don't need to also fetch items with current user id as user_id, so we just get items with null user_id
     // We don't need it because in theory, user cannot have the item he wants to add in DB as he's adding it
-    let query = Item.query().where('name', 'ilike', `%${payload.search}%`).whereNull('user_id')
+    let query = Item.query()
+      .whereNotIn('id', userItemsIds)
+      .where('name', 'ilike', `%${payload.search}%`)
+      .whereNull('user_id')
+      .orderBy('created_at', 'desc')
 
     return query.limit(5)
+  }
+
+  async attach({ request, auth }: HttpContext) {
+    const userId = auth.user?.id
+    if (!userId) {
+      throw new Error(`No userId found`)
+    }
+
+    const user = await User.find(userId)
+    if (!user) {
+      throw new Error('User not found')
+    }
+
+    const data = request.all()
+    const payload = await itemAttachValidator.validate(data)
+
+    const item = await Item.findOrFail(payload.item_id)
+
+    // We only need to attach item number of count times
+    await user.related('items').attach(Array(payload.count).fill(payload.item_id))
+
+    // Now we need to update user total value
+    const date = this.getFormattedDate()
+    if (user.totalValue[date]) {
+      user.totalValue[date] += item.lastPrice * payload.count
+    } else {
+      user.totalValue[date] = item.lastPrice * payload.count
+    }
+
+    await user.save()
+
+    return item
+  }
+
+  /**
+   * Detach item from a user.
+   * Things to do here are:
+   * - Update user total Value for today date
+   * - Detach item for user
+   */
+  async detach({ request, auth }: HttpContext) {
+    const userId = auth.user?.id
+    if (!userId) {
+      throw new Error(`No userId found`)
+    }
+
+    const user = await User.find(userId)
+    if (!user) {
+      throw new Error('User not found')
+    }
+
+    const data = request.all()
+    const payload = await itemDetachValidator.validate(data)
+
+    const item = await Item.findOrFail(payload.item_id)
+    const lastPrice = item.lastPrice
+    const formattedDate = this.getFormattedDate()
+
+    const itemWithCount = await this.itemWithCount(user, item.id)
+    const itemTotalValue = itemWithCount.count * lastPrice
+    const totalValueOfItemsForUser = await this.computeTotalValueOfItems(user)
+
+    if (!user.totalValue[formattedDate]) {
+      // If we don't have a total value for this day, then the value will be totalValueOfItems - itemTotalValue
+      user.totalValue[formattedDate] = totalValueOfItemsForUser - itemTotalValue
+    } else {
+      // If we already have a value for this day, then I subtract the amount of the deleted item
+      user.totalValue[formattedDate] -= itemTotalValue
+    }
+
+    await user.save()
+    await user.related('items').detach([item.id])
+
+    if (!user.isAdmin && item.userId === user.id) {
+      await item.delete()
+      return user
+    } else {
+      return item
+    }
   }
 }

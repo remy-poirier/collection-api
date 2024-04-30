@@ -11,7 +11,7 @@ export default class extends BaseSchema {
        * this lets users add their own items.
        * We also add a status to the table to know if the item has been validated or not.
        */
-      table.uuid('user_id').references('id').inTable('users')
+      table.text('user_id')
       table.text('status')
     })
   }

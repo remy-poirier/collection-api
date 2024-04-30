@@ -33,3 +33,16 @@ export const itemSearchValidator = vine.compile(
     search: vine.string(),
   })
 )
+
+export const itemAttachValidator = vine.compile(
+  vine.object({
+    item_id: vine.string(),
+    count: vine.number(),
+  })
+)
+
+export const itemDetachValidator = vine.compile(
+  vine.object({
+    item_id: vine.string(),
+  })
+)

@@ -42,6 +42,8 @@ router
     router.get(':id', '#controllers/items_controller.byId')
     router.post('count', '#controllers/items_controller.updateCount')
     router.post('price', '#controllers/items_controller.updatePrice')
+    router.post('attach', '#controllers/items_controller.attach')
+    router.post('detach', '#controllers/items_controller.detach')
   })
   .prefix('collection')
   .use(middleware.auth())
