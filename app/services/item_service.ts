@@ -9,6 +9,8 @@ import {
   itemUpdatePriceValidator,
 } from '#validators/item'
 import { HttpContext } from '@adonisjs/core/http'
+import { ModelObject, ModelPaginatorContract } from '@adonisjs/lucid/types/model'
+import { SimplePaginatorMetaKeys } from '@adonisjs/lucid/types/querybuilder'
 
 type ItemWithCount = Item & { count: number }
 
@@ -39,6 +41,42 @@ export default class ItemService {
         count: Number.parseInt(item.$extras.count),
       } as ItemWithCount
     })
+  }
+
+  async itemsWithCountAndSearch(
+    user: User,
+    search: {
+      search: string
+      sortBy: string
+      orderBy: 'asc' | 'desc'
+      page: number
+      limit: number
+    }
+  ): Promise<{
+    meta: SimplePaginatorMetaKeys
+    data: ItemWithCount[]
+  }> {
+    const distinctItemsWithCount = await user
+      .related('items')
+      .query()
+      .select('items.*')
+      .orderBy(`items.${search.sortBy}`, `${search.orderBy}`)
+      .where('items.name', 'ilike', `%${search.search}%`)
+      .count('items.id as count')
+      .groupBy('items.id')
+      .paginate(search.page, search.limit)
+
+    const serialized = distinctItemsWithCount.serialize()
+    return {
+      ...serialized,
+      data: serialized.data.map(
+        (_: ModelObject, index: number): ItemWithCount =>
+          ({
+            ...distinctItemsWithCount[index].serialize(),
+            count: distinctItemsWithCount[index].$extras.count,
+          }) as ItemWithCount
+      ),
+    }
   }
 
   async itemWithCount(user: User, itemId: string): Promise<ItemWithCount> {
@@ -86,7 +124,7 @@ export default class ItemService {
     }, 0)
   }
 
-  async all({ auth }: HttpContext) {
+  async all({ auth, request }: HttpContext) {
     const userId = auth.user?.id
     if (!userId) {
       throw new Error(`User with id ${userId} not found`)
@@ -98,7 +136,19 @@ export default class ItemService {
       throw new Error('User not found')
     }
 
-    return this.itemsWithCount(user)
+    const search = request.input('search', '')
+    const sortBy = request.input('sortBy', 'created_at')
+    const orderBy = request.input('orderBy', 'desc')
+    const page = request.input('page', 1)
+    const limit = request.input('limit', 10)
+
+    return this.itemsWithCountAndSearch(user, {
+      search,
+      sortBy,
+      orderBy,
+      page,
+      limit,
+    })
   }
 
   // This function will create a new item and attach it to current user
