@@ -9,12 +9,17 @@ import {
   itemUpdatePriceValidator,
 } from '#validators/item'
 import { HttpContext } from '@adonisjs/core/http'
-import { ModelObject, ModelPaginatorContract } from '@adonisjs/lucid/types/model'
+import { ModelObject } from '@adonisjs/lucid/types/model'
 import { SimplePaginatorMetaKeys } from '@adonisjs/lucid/types/querybuilder'
+import UserService from '#services/user_service'
+import { inject } from '@adonisjs/core'
 
 type ItemWithCount = Item & { count: number }
 
+@inject()
 export default class ItemService {
+  constructor(protected userService: UserService) {}
+
   getFormattedDate(): string {
     const currentDate = new Date()
     const dateFormatter = new Intl.DateTimeFormat('fr-FR', {
@@ -363,9 +368,10 @@ export default class ItemService {
       const newItemTotalValue = await this.itemTotalValue(u, item.id)
       const itemWithCount = await this.itemWithCount(u, item.id)
       const oldItemTotalValue = itemWithCount.count * oldItemPrice
+      const lastTotalValue = this.userService.getLastKnownTotalValue(u)
 
       if (!u.totalValue[formattedDate]) {
-        u.totalValue[formattedDate] = newItemTotalValue
+        u.totalValue[formattedDate] = lastTotalValue - oldItemTotalValue + newItemTotalValue
       } else {
         u.totalValue[formattedDate] += newItemTotalValue - oldItemTotalValue
       }
